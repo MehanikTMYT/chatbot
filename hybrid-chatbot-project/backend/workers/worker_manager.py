@@ -258,14 +258,57 @@ class WorkerManager:
         task_id = str(uuid.uuid4())
         self.registry.assign_task(worker.worker_id, task_id)
         
-        # Here we would send the task to the worker
-        # For now, return the worker info and task ID
-        result = {
-            "task_id": task_id,
-            "worker_id": worker.worker_id,
-            "worker_hostname": worker.hostname,
-            "task_data": task_data
-        }
+        # Send task to worker via HTTP API
+        worker_url = f"http://{worker.ip_address}:{worker.gpu_info.get('port', 8000)}/generate"
+        
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    worker_url,
+                    json={
+                        "prompt": task_data.get("prompt", ""),
+                        "max_new_tokens": task_data.get("max_new_tokens", 512),
+                        "temperature": task_data.get("temperature", 0.7),
+                        "top_p": task_data.get("top_p", 0.9),
+                        "top_k": task_data.get("top_k", 50),
+                        "repetition_penalty": task_data.get("repetition_penalty", 1.1),
+                        "stream": False
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result_data = response.json()
+                    # Complete the task in registry
+                    self.registry.complete_task(worker.worker_id, task_id)
+                    
+                    result = {
+                        "task_id": task_id,
+                        "worker_id": worker.worker_id,
+                        "worker_hostname": worker.hostname,
+                        "result": result_data,
+                        "status": "completed"
+                    }
+                else:
+                    # Mark task as failed
+                    self.registry.complete_task(worker.worker_id, task_id)
+                    result = {
+                        "task_id": task_id,
+                        "worker_id": worker.worker_id,
+                        "worker_hostname": worker.hostname,
+                        "error": f"Worker returned status {response.status_code}",
+                        "status": "failed"
+                    }
+        except Exception as e:
+            # Mark task as failed
+            self.registry.complete_task(worker.worker_id, task_id)
+            result = {
+                "task_id": task_id,
+                "worker_id": worker.worker_id,
+                "worker_hostname": worker.hostname,
+                "error": str(e),
+                "status": "failed"
+            }
         
         return result
 
