@@ -1,37 +1,24 @@
 ```
-# Python
+# Dependencies
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
-venv/
-ENV/
-env.bak/
+*.pyc
+*.pyo
+*.pyd
 .venv/
+venv/
+env/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Build artifacts
+build/
+dist/
+*.egg
+*.egg-info/
+*.so
+*.dylib
+*.dll
 
 # Logs
 *.log
@@ -39,45 +26,41 @@ env.bak/
 # Environment
 .env
 .env.local
-*.env.*
+*.env
 
-# Coverage
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
 .coverage
 htmlcov/
 .coverage.*
+.nyc_output/
+coverage/
+.pytest_cache/
+.mypy_cache/
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
+# Distribution / Packaging
+*.tar.gz
+*.whl
+*.zip
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Testing
+# Python
+*.py[cod]
+*$py.class
+*$py.o
+*$pyd
+.Python
 .pytest_cache/
 .mypy_cache/
 .hypothesis/
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+.coverage*
+.tox/
 ```
