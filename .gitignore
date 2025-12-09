@@ -1,66 +1,64 @@
 ```
 # Dependencies
+requirements.txt
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.venv/
-venv/
-env/
 .Python
+env/
+venv/
+.venv/
+.venv/
+pyvenv.cfg
 pip-log.txt
 pip-delete-this-directory.txt
-
-# Build artifacts
-build/
-dist/
-*.egg
-*.egg-info/
-*.so
-*.dylib
-*.dll
-
-# Logs
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
 
-# Environment
-.env
-.env.local
-*.env
+# Rust
+target/
+Cargo.lock
 
-# Editors
+# Node.js/TypeScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# OS
 .DS_Store
 Thumbs.db
-
-# Testing
-.coverage
-htmlcov/
-.coverage.*
-.nyc_output/
-coverage/
-.pytest_cache/
-.mypy_cache/
-
-# Distribution / Packaging
-*.tar.gz
-*.whl
-*.zip
-*.egg-info/
-
-# Python
-*.py[cod]
-*$py.class
-*$py.o
-*$pyd
-.Python
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-.coverage*
-.tox/
+ehthumbs.db
+Icon?
+.directory
+*.nfs
+*~
+.#*
+.DS_Store?
 ```
