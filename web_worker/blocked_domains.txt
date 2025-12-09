@@ -1,0 +1,7 @@
+# Blocked domains list
+# Domains listed here will be blocked by the content filter
+malware.example.com
+phishing-site.org
+fake-news.net
+dangerous-content.com
+untrusted-source.org
