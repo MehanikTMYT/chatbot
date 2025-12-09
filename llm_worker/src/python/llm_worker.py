@@ -15,13 +15,14 @@ import json
 # Import required libraries
 try:
     import torch
+    import numpy as np
     import tensorrt as trt
     from transformers import AutoTokenizer
     import pycuda.driver as cuda
     import pycuda.autoinit
 except ImportError as e:
     print(f"Missing dependencies: {e}")
-    print("Please install required packages: torch, tensorrt, transformers, pycuda")
+    print("Please install required packages: torch, tensorrt, transformers, pycuda, numpy")
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,30 @@ class TensorRTLLMEngine:
             # Create execution context
             self.context = self.engine.create_execution_context()
             
-            logger.info("TensorRT engine loaded successfully")
+            # Get input/output binding information
+            self.input_binding_index = self.engine.get_binding_index("input_ids")
+            self.output_binding_index = self.engine.get_binding_index("output_ids")
+            
+            # Allocate CUDA memory for bindings
+            max_batch_size = 1  # For now, single batch processing
+            max_seq_length = 2048  # Maximum sequence length
+            
+            # Allocate input buffer
+            self.input_shape = (max_batch_size, max_seq_length)
+            self.input_buffer = cuda.mem_alloc(max_batch_size * max_seq_length * 4)  # 4 bytes per int32
+            
+            # Allocate output buffer
+            self.output_shape = (max_batch_size, max_seq_length)
+            self.output_buffer = cuda.mem_alloc(max_batch_size * max_seq_length * 4)  # 4 bytes per int32
+            
+            # Set bindings
+            self.context.set_binding_shape(self.input_binding_index, self.input_shape)
+            self.context.set_binding_shape(self.output_binding_index, self.output_shape)
+            
+            # Create CUDA stream
+            self.stream = cuda.Stream()
+            
+            logger.info("TensorRT engine loaded successfully with bindings")
         except Exception as e:
             logger.error(f"Failed to load TensorRT engine: {e}")
             raise
@@ -159,25 +183,56 @@ class TensorRTLLMEngine:
         """Generate text using TensorRT engine"""
         try:
             # Tokenize input
-            inputs = self.tokenizer.encode(prompt, return_tensors="pt")
+            inputs = self.tokenizer.encode(prompt, return_tensors="pt").to('cuda')
             
             # Check GPU memory before generation
             # For simplicity, we'll estimate memory usage
-            estimated_memory = len(inputs[0]) * 4 * 1024  # Rough estimate
+            estimated_memory = inputs.numel() * 4 * 1024  # Rough estimate
             
             if not self.gpu_manager.can_allocate(estimated_memory):
                 logger.warning("Insufficient GPU memory, attempting to clear cache")
                 torch.cuda.empty_cache()
             
-            # Perform generation
+            # Allocate memory for input on GPU
+            input_ids = inputs[0].cpu().numpy()
+            input_size = input_ids.nbytes
+            
+            # Copy input to GPU buffer
+            cuda.memcpy_htod(self.input_buffer, input_ids)
+            
+            # Set input binding
+            self.context.set_binding_shape(self.input_binding_index, input_ids.shape)
+            
+            # Perform inference
             start_time = time.time()
             
-            # This is a simplified version - actual implementation would use TensorRT execution
-            # For now, we'll simulate the generation process
-            generated_text = self._simulate_generation(inputs, config)
+            # Execute the model
+            success = self.context.execute_async_v2(
+                bindings=[int(self.input_buffer), int(self.output_buffer)],
+                stream_handle=self.stream.handle
+            )
+            
+            if not success:
+                raise RuntimeError("TensorRT inference execution failed")
+            
+            # Synchronize the stream
+            self.stream.synchronize()
+            
+            # Copy output from GPU to CPU
+            output_size = self.output_shape[0] * self.output_shape[1] * 4  # 4 bytes per int32
+            output_data = np.empty(self.output_shape[0] * self.output_shape[1], dtype=np.int32)
+            cuda.memcpy_dtoh(output_data, self.output_buffer)
+            
+            # Reshape and decode output
+            output_data = output_data.reshape(self.output_shape)
+            output_tokens = output_data[0]  # Get first batch
+            
+            # Remove padding zeros and decode
+            output_tokens = output_tokens[output_tokens != 0]
+            generated_text = self.tokenizer.decode(output_tokens, skip_special_tokens=True)
             
             end_time = time.time()
-            logger.info(f"Generated {config.max_new_tokens} tokens in {end_time - start_time:.2f}s")
+            logger.info(f"Generated {len(output_tokens)} tokens in {end_time - start_time:.2f}s")
             
             return generated_text
         except Exception as e:

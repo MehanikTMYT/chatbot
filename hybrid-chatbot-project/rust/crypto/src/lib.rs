@@ -5,6 +5,7 @@ use anyhow::Result;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use ring::{aead, aead::LessSafeKey, aead::UnboundKey, aead::Nonce, aead::Aad};
 
 /// Represents an encrypted message with associated metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,15 +51,31 @@ impl CryptoService {
 
     /// Encrypts data using the configured algorithm
     pub fn encrypt(&self, data: &[u8]) -> Result<EncryptedMessage> {
-        // Implementation would use ring or rustls for actual encryption
-        // This is a placeholder implementation
-        let iv = vec![0u8; 12]; // In real implementation, use random IV
-        let encrypted_data = data.to_vec(); // Placeholder
+        let key_bytes = &self.config.key;
+        let alg = match self.config.algorithm {
+            CryptoAlgorithm::Aes256Gcm => &aead::AES_256_GCM,
+            CryptoAlgorithm::ChaCha20Poly1305 => &aead::CHACHA20_POLY1305,
+        };
+        
+        let unbound_key = UnboundKey::new(alg, key_bytes)?;
+        let key = LessSafeKey::new(unbound_key);
+        
+        // Generate random nonce (IV)
+        let mut nonce_bytes = [0u8; 12];  // 96-bit nonce for AES-GCM
+        get_random_bytes(&mut nonce_bytes);
+        let nonce = Nonce::try_assume_unique_for_key(nonce_bytes)?;
+        
+        // Create additional authenticated data (AAD)
+        let aad = Aad::from(&[]);
+        
+        // Prepare buffer for encryption (data + tag)
+        let mut in_out = data.to_vec();
+        let tag = key.seal_in_place_append_tag(nonce, aad, &mut in_out)?;
         
         Ok(EncryptedMessage {
-            data: encrypted_data,
-            iv,
-            tag: Some(vec![0u8; 16]), // Placeholder
+            data: in_out,
+            iv: nonce_bytes.to_vec(),
+            tag: Some(tag.as_ref().to_vec()),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -68,10 +85,41 @@ impl CryptoService {
 
     /// Decrypts data using the configured algorithm
     pub fn decrypt(&self, encrypted: &EncryptedMessage) -> Result<Vec<u8>> {
-        // Implementation would use ring or rustls for actual decryption
-        // This is a placeholder implementation
-        Ok(encrypted.data.clone())
+        let key_bytes = &self.config.key;
+        let alg = match self.config.algorithm {
+            CryptoAlgorithm::Aes256Gcm => &aead::AES_256_GCM,
+            CryptoAlgorithm::ChaCha20Poly1305 => &aead::CHACHA20_POLY1305,
+        };
+        
+        let unbound_key = UnboundKey::new(alg, key_bytes)?;
+        let key = LessSafeKey::new(unbound_key);
+        
+        // Reconstruct nonce from IV
+        let mut nonce_bytes = [0u8; 12];
+        if encrypted.iv.len() != 12 {
+            return Err(anyhow::anyhow!("Invalid IV length"));
+        }
+        nonce_bytes.copy_from_slice(&encrypted.iv);
+        let nonce = Nonce::try_assume_unique_for_key(nonce_bytes)?;
+        
+        // Create additional authenticated data (AAD)
+        let aad = Aad::from(&[]);
+        
+        // Prepare buffer for decryption (data + tag)
+        let mut in_out = encrypted.data.clone();
+        
+        // Decrypt and verify
+        let plaintext = key.open_in_place(nonce, aad, &mut in_out)?;
+        
+        Ok(plaintext.to_vec())
     }
+}
+
+/// Helper function to generate random bytes
+fn get_random_bytes(bytes: &mut [u8]) {
+    use ring::rand::{SecureRandom, SystemRandom};
+    let rng = SystemRandom::new();
+    rng.fill(bytes).unwrap();
 }
 
 /// Python bindings for the cryptographic service
@@ -101,16 +149,31 @@ fn crypto(_py: Python, m: &PyModule) -> PyResult<()> {
                 .encrypt(&data)
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyException, _>(e.to_string()))?;
             
-            // In a real implementation, we would serialize the EncryptedMessage
-            // For now, return the encrypted data directly
-            Ok(encrypted.data)
+            // Serialize the EncryptedMessage to bytes for Python
+            let mut result = Vec::new();
+            result.extend_from_slice(&encrypted.iv);
+            if let Some(tag) = &encrypted.tag {
+                result.extend_from_slice(tag);
+            }
+            result.extend_from_slice(&encrypted.data);
+            
+            Ok(result)
         }
 
         fn decrypt(&self, data: Vec<u8>) -> PyResult<Vec<u8>> {
+            // Parse the encrypted data: IV (12 bytes) + Tag (16 bytes for AES-GCM) + ciphertext
+            if data.len() < 28 {  // At least IV + tag
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Encrypted data too short"));
+            }
+            
+            let iv = data[0..12].to_vec();
+            let tag = Some(data[12..28].to_vec());
+            let ciphertext = data[28..].to_vec();
+            
             let encrypted_msg = EncryptedMessage {
-                data,
-                iv: vec![0u8; 12],
-                tag: Some(vec![0u8; 16]),
+                data: ciphertext,
+                iv,
+                tag,
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
