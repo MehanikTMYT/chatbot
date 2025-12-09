@@ -14,6 +14,8 @@ from core.config import settings
 from core.security import verify_token
 from database.session import get_db, init_db
 from api.routers import auth, chat, workers, characters
+from api.routers.monitoring import router as monitoring_router
+from workers.worker_manager import worker_manager
 
 # Configure logging
 logging.basicConfig(
@@ -29,7 +31,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     logger.info("Database initialized successfully")
     
+    # Initialize worker manager
+    logger.info("Initializing worker manager...")
+    await worker_manager.initialize()
+    await worker_manager.start_monitoring()
+    logger.info("Worker manager initialized successfully")
+    
     yield  # Application runs here
+    
+    logger.info("Shutting down worker manager...")
+    await worker_manager.stop_monitoring()
     
     logger.info("Shutting down application...")
 
@@ -60,6 +71,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(workers.router, prefix="/api/v1/workers", tags=["Workers"])
 app.include_router(characters.router, prefix="/api/v1/characters", tags=["Characters"])
+app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["Monitoring"])
 
 @app.get("/")
 async def root():

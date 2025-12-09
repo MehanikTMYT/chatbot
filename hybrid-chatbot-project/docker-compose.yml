@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  # Nginx reverse proxy and load balancer
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "8080:8080"  # Metrics port
+    volumes:
+      - ./deployment/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks:
+      - app-network
+
   # Frontend service
   frontend:
     build:
@@ -23,34 +36,50 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=mysql+pymysql://chatbot:password123@mysql:3306/chatbot_db
+      - DATABASE_URL=postgresql+asyncpg://chatbot:password123@postgres:5432/chatbot_db
       - REDIS_URL=redis://redis:6379
       - SECRET_KEY=your-super-secret-key-change-in-production
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
     depends_on:
-      - mysql
+      - postgres
       - redis
     networks:
       - app-network
 
-  # MySQL database
-  mysql:
-    image: mysql:8.0
-    ports:
-      - "3306:3306"
+  # Backup API service for high availability
+  api_backup:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.backend
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword123
-      MYSQL_DATABASE: chatbot_db
-      MYSQL_USER: chatbot
-      MYSQL_PASSWORD: password123
+      - DATABASE_URL=postgresql+asyncpg://chatbot:password123@postgres:5432/chatbot_db
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-super-secret-key-change-in-production
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - app-network
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: chatbot_db
+      POSTGRES_USER: chatbot
+      POSTGRES_PASSWORD: password123
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
       - ./deployment/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-network
 
-  # Redis cache
+  # Redis cache and message broker
   redis:
     image: redis:7-alpine
     ports:
@@ -83,10 +112,45 @@ services:
     networks:
       - app-network
 
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployment/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - app-network
+
+  # Grafana dashboard
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployment/dashboards:/etc/grafana/provisioning/dashboards
+      - ./deployment/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+
 volumes:
-  mysql_data:
+  postgres_data:
   redis_data:
   vector_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   app-network:

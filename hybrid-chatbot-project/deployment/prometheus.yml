@@ -1,0 +1,88 @@
+# Prometheus configuration for Hybrid Chatbot System
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # Alerting rules and recording rules
+  # - "rules.yml"
+
+scrape_configs:
+  # API Gateway metrics
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api:8000', 'api_backup:8000']
+    scrape_interval: 5s
+    metrics_path: /api/v1/monitoring/metrics
+
+  # Nginx metrics (if using nginx-module)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:8080']
+    scrape_interval: 10s
+
+  # Redis metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 15s
+    # Note: You may need redis_exporter for actual Redis metrics
+    # This is just a placeholder
+
+  # PostgreSQL metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 15s
+    # Note: You may need postgres_exporter for actual PostgreSQL metrics
+    # This is just a placeholder
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - "alertmanager:9093"
+
+# Custom alerting rules for the system
+groups:
+  - name: system_alerts
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: cpu_usage_percent > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 2 minutes"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: memory_usage_bytes / memory_total_bytes * 100 > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 80% for more than 2 minutes"
+
+      # Worker unavailable
+      - alert: WorkerUnavailable
+        expr: worker_health_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker is unavailable"
+          description: "A worker has been marked as unhealthy for more than 1 minute"
+
+      # High request duration
+      - alert: HighRequestDuration
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request duration detected"
+          description: "95th percentile of request duration is above 1 second"
