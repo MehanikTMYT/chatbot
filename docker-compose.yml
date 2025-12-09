@@ -1,45 +1,98 @@
 version: '3.8'
 
 services:
+  # Backend service
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_EXTERNAL_PORT:-8000}:${BACKEND_PORT}"
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/chatbot
-      - REDIS_URL=redis://redis:6379
+      - BACKEND_ENV=${BACKEND_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
     depends_on:
       - db
       - redis
     volumes:
-      - ./logs:/app/logs
+      - ${APP_LOGS_VOLUME:-./logs}:/app/logs
+      - /app/__pycache__  # Avoid host Python cache conflicts
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # Frontend service
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "80:80"
+      - "${FRONTEND_EXTERNAL_PORT:-80}:${FRONTEND_PORT}"
     depends_on:
       - backend
+    environment:
+      - BACKEND_URL=http://backend:${BACKEND_PORT}
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
 
+  # PostgreSQL database
   db:
     image: postgres:13
     environment:
-      POSTGRES_DB: chatbot
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_VOLUME:-postgres_data}:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d  # For initialization scripts
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Redis cache
   redis:
     image: redis:6-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - ${REDIS_DATA_VOLUME:-redis_data}:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  ${APP_NETWORK_NAME:-app-network}:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  ${POSTGRES_DATA_VOLUME:-postgres_data}:
+    driver: local
+  ${REDIS_DATA_VOLUME:-redis_data}:
+    driver: local
+  ${APP_LOGS_VOLUME:-app_logs}:
+    driver: local

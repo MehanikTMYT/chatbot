@@ -1,0 +1,103 @@
+version: '3.8'
+
+# Production/VDS specific configuration
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # Backend service with production settings
+  backend:
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # Additional security and production settings
+    environment:
+      - BACKEND_ENV=production
+      - LOG_LEVEL=INFO
+    # More robust restart policy
+    restart: always
+    # Security configurations
+    security_opt:
+      - no-new-privileges:true
+    # Read-only root filesystem (except for explicitly mounted volumes)
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    # Additional security
+    user: "1000:1000"  # Run as non-root user
+
+  # Frontend service with production settings
+  frontend:
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+
+  # PostgreSQL database with production settings
+  db:
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    # Additional PostgreSQL production configurations
+    command: >
+      postgres
+      -c max_connections=100
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c max_worker_processes=2
+      -c max_parallel_workers_per_gather=1
+      -c max_parallel_workers=2
+      -c max_parallel_maintenance_workers=1
+
+  # Redis with production settings
+  redis:
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    # Production Redis configurations
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
