@@ -1,0 +1,74 @@
+version: '3.8'
+
+# Local development configuration - all services on one machine
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.local.yml up
+
+services:
+  # Backend service
+  backend:
+    environment:
+      - BACKEND_ENV=development
+      - DATABASE_URL=mysql+pymysql://chatbot:password123@db:3306/chatbot_db
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - LOG_LEVEL=DEBUG
+    # Enable additional development features
+    volumes:
+      - ./hybrid-chatbot-project:/app  # Mount source code for live reload
+      - ${APP_LOGS_VOLUME:-./logs}:/app/logs
+    # No resource limits for development
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Frontend service
+  frontend:
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - NODE_ENV=development
+    # Development-specific settings
+    volumes:
+      - ./hybrid-chatbot-project/frontend:/app/src  # Mount frontend source
+    # No resource limits for development
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # MySQL database
+  db:
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword123
+      MYSQL_DATABASE: chatbot_db
+      MYSQL_USER: chatbot
+      MYSQL_PASSWORD: password123
+    # Development-specific MySQL settings
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --max-connections=50
+      --innodb-buffer-pool-size=128M
+      --innodb-log-file-size=32M
+      --table-open-cache=200
+      --max-heap-table-size=32M
+      --tmp-table-size=32M
+      --sort-buffer-size=1M
+      --read-buffer-size=64K
+      --read-rnd-buffer-size=128K
+      --myisam-sort-buffer-size=32M
+      --net-buffer-length=8K
+      --key-buffer-size=4M
+      --bulk-insert-buffer-size=32M
+
+  # Redis cache
+  redis:
+    # Development-specific Redis settings
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru

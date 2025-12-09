@@ -1,21 +1,10 @@
 ```
-# Docker and build artifacts
-*.log
-*.tmp
-
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Dependencies and build directories
+# Dependencies
 node_modules/
-venv/
 .venv/
+venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.egg-info/
 dist/
 build/
 target/
@@ -23,42 +12,35 @@ target/
 .mypy_cache/
 .pytest_cache/
 
-# Editor/IDE files
-.vscode/
-.idea/
+# Environment
+.env
+.env.local
+.env.*
+
+# Logs and temporary files
+*.log
+*.tmp
 *.swp
 *.swo
 
-# System files
+# Editor/IDE
+.vscode/
+.idea/
+*.pyc
+*.pyo
+*.pyd
+
+# System
 .DS_Store
 Thumbs.db
 
-# Coverage and testing
+# Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Compressed files
-*.zip
-*.gz
+# Docker (if not needed in version control)
 *.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
 *.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+*.zip
 ```

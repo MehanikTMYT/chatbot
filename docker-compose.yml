@@ -46,24 +46,24 @@ services:
       - ${APP_NETWORK_NAME:-app-network}
     restart: unless-stopped
 
-  # PostgreSQL database
+  # MySQL database
   db:
-    image: postgres:13
+    image: mysql:8.0
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chatbot_db}
+      MYSQL_USER: ${MYSQL_USER:-chatbot}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password123}
     volumes:
-      - ${POSTGRES_DATA_VOLUME:-postgres_data}:/var/lib/postgresql/data
+      - ${MYSQL_DATA_VOLUME:-mysql_data}:/var/lib/mysql
       - ./init-scripts:/docker-entrypoint-initdb.d  # For initialization scripts
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${MYSQL_PORT:-3306}:3306"
     networks:
       - ${APP_NETWORK_NAME:-app-network}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER:-chatbot}", "-p${MYSQL_PASSWORD:-password123}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -90,7 +90,7 @@ networks:
     driver: bridge
 
 volumes:
-  ${POSTGRES_DATA_VOLUME:-postgres_data}:
+  ${MYSQL_DATA_VOLUME:-mysql_data}:
     driver: local
   ${REDIS_DATA_VOLUME:-redis_data}:
     driver: local
