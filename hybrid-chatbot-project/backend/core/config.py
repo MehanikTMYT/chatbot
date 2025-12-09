@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    LOG_FILE: str = os.getenv("LOG_FILE", "./logs/app.log")
+    ERROR_LOG_FILE: str = os.getenv("ERROR_LOG_FILE", "./logs/error.log")
     
     # Security
     CORS_ORIGINS: List[str] = os.getenv("CORS_ORIGINS", '["http://localhost:3000", "http://localhost:8000"]').replace("'", '"')
@@ -76,6 +78,15 @@ class Settings(BaseSettings):
 
 # Create settings instance
 settings = Settings()
+
+# Initialize database engine
+from sqlalchemy.ext.asyncio import create_async_engine
+DB_ENGINE = create_async_engine(
+    settings.DATABASE_URL,
+    pool_size=settings.DATABASE_POOL_SIZE,
+    max_overflow=settings.DATABASE_POOL_OVERFLOW,
+    echo=False  # Set to True for SQL debugging
+)
 
 # Process JSON-like environment variables
 import json

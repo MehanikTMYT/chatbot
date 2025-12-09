@@ -47,11 +47,15 @@ def create_refresh_token(data: dict) -> str:
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str = Depends(security)) -> dict:
+def verify_token(token: str) -> dict:
     """Verify JWT token and return payload"""
     try:
+        # Extract the token from the Bearer header format
+        if token.startswith("Bearer "):
+            token = token[7:]
+        
         payload = jwt.decode(
-            token.credentials, 
+            token, 
             settings.SECRET_KEY, 
             algorithms=[settings.ALGORITHM],
             audience=[settings.JWT_AUDIENCE],
@@ -74,7 +78,8 @@ def verify_token(token: str = Depends(security)) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def verify_access_token(token: str = Depends(security)) -> dict:
+
+def verify_access_token(token: str) -> dict:
     """Verify JWT access token specifically"""
     payload = verify_token_raw(token)
     token_type = payload.get("type")
@@ -88,11 +93,16 @@ def verify_access_token(token: str = Depends(security)) -> dict:
     
     return payload
 
-def verify_token_raw(token: str = Depends(security)) -> dict:
+
+def verify_token_raw(token: str) -> dict:
     """Raw token verification without type checking"""
     try:
+        # Extract the token from the Bearer header format
+        if token.startswith("Bearer "):
+            token = token[7:]
+        
         payload = jwt.decode(
-            token.credentials,
+            token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
             audience=[settings.JWT_AUDIENCE],

@@ -41,8 +41,8 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Schema for token data"""
+    sub: Optional[str] = None
     username: Optional[str] = None
-    user_id: Optional[int] = None
 
 class LoginRequest(BaseModel):
     """Schema for login requests"""

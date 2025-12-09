@@ -4,16 +4,43 @@ Handles user registration, login, and token management
 """
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.session import get_db
 from database.models import User
-from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
+from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_token
 from core.config import settings
 from api.schemas.auth import UserCreate, UserResponse, Token, TokenData
 
 router = APIRouter()
+
+# OAuth2 scheme for token handling
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    """Get current user from token"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    token_data = verify_token(token)
+    user_id = token_data.get("sub")
+    
+    if user_id is None:
+        raise credentials_exception
+    
+    result = await db.execute(User.__table__.select().where(User.id == int(user_id)))
+    user = result.scalar_one_or_none()
+    
+    if user is None:
+        raise credentials_exception
+    
+    return user
+
 
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -62,6 +89,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         full_name=new_user.full_name
     )
 
+
 @router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     """Authenticate user and return access/refresh tokens"""
@@ -102,6 +130,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
         token_type="bearer",
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
+
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(token: str, db: AsyncSession = Depends(get_db)):
@@ -157,8 +186,9 @@ async def refresh_token(token: str, db: AsyncSession = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(current_user: User = Depends(get_current_user)):
+async def get_current_user_endpoint(current_user: User = Depends(get_current_user)):
     """Get current authenticated user"""
     return UserResponse(
         id=current_user.id,
@@ -166,31 +196,3 @@ async def get_current_user(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         full_name=current_user.full_name
     )
-
-# Dependency to get current user from token
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Get current user from token"""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    token_data = verify_token(token)
-    user_id = token_data.get("sub")
-    
-    if user_id is None:
-        raise credentials_exception
-    
-    async with get_db() as db:
-        result = await db.execute(User.__table__.select().where(User.id == int(user_id)))
-        user = result.scalar_one_or_none()
-        
-        if user is None:
-            raise credentials_exception
-        
-        return user
-
-# OAuth2 scheme for token handling
-from fastapi.security import OAuth2PasswordBearer
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
