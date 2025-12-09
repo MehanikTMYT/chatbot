@@ -1,0 +1,42 @@
+version: '3.8'
+
+# VDS configuration - only frontend service
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.vds.yml up
+# This configuration runs only the frontend service, connecting to external backend
+
+services:
+  # Remove backend service for VDS deployment
+  backend:
+    scale: 0  # Don't run backend on VDS
+    
+  # Frontend service with VDS-specific settings
+  frontend:
+    ports:
+      - "${FRONTEND_EXTERNAL_PORT:-80}:3000"  # Expose on port 80 for web access
+    environment:
+      - BACKEND_URL=${BACKEND_API_URL:-http://localhost:8000}  # External backend URL
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: always
+    # Security configurations for VDS
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+
+  # Remove database for VDS deployment
+  db:
+    scale: 0  # Don't run database on VDS
+
+  # Remove Redis for VDS deployment  
+  redis:
+    scale: 0  # Don't run Redis on VDS

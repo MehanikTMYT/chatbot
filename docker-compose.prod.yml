@@ -51,7 +51,7 @@ services:
       - /tmp
       - /var/cache/nginx
 
-  # PostgreSQL database with production settings
+  # MySQL database with production settings
   db:
     # Resource limits for production
     deploy:
@@ -65,25 +65,22 @@ services:
     restart: always
     security_opt:
       - no-new-privileges:true
-    # Additional PostgreSQL production configurations
+    # Additional MySQL production configurations
     command: >
-      postgres
-      -c max_connections=100
-      -c shared_buffers=256MB
-      -c effective_cache_size=1GB
-      -c maintenance_work_mem=64MB
-      -c checkpoint_completion_target=0.9
-      -c wal_buffers=16MB
-      -c default_statistics_target=100
-      -c random_page_cost=1.1
-      -c effective_io_concurrency=200
-      -c work_mem=4MB
-      -c min_wal_size=1GB
-      -c max_wal_size=4GB
-      -c max_worker_processes=2
-      -c max_parallel_workers_per_gather=1
-      -c max_parallel_workers=2
-      -c max_parallel_maintenance_workers=1
+      --default-authentication-plugin=mysql_native_password
+      --max-connections=100
+      --innodb-buffer-pool-size=256M
+      --innodb-log-file-size=64M
+      --table-open-cache=400
+      --max-heap-table-size=64M
+      --tmp-table-size=64M
+      --sort-buffer-size=2M
+      --read-buffer-size=128K
+      --read-rnd-buffer-size=256K
+      --myisam-sort-buffer-size=64M
+      --net-buffer-length=16K
+      --key-buffer-size=8M
+      --bulk-insert-buffer-size=64M
 
   # Redis with production settings
   redis:

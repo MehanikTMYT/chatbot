@@ -1,0 +1,102 @@
+version: '3.8'
+
+# Worker services configuration
+# Use with: docker-compose -f docker-compose.yml [-f docker-compose.local.yml] -f docker-compose.workers.yml up
+# Workers can be enabled/disabled via environment variables
+
+services:
+  # LLM Worker service
+  llm_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - WORKER_TYPE=llm
+      - WORKER_HOST=0.0.0.0
+      - WORKER_PORT=8002
+      - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://chatbot:password123@db:3306/chatbot_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models}:/app/models
+      - ${TENSORRT_ENGINE_PATH:-./engines}:/app/engines
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    # GPU support if available
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Only start if LLM_WORKER_ENABLED is true
+    profiles:
+      - llm
+
+  # Web Worker service  
+  web_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - WORKER_TYPE=web
+      - WORKER_HOST=0.0.0.0
+      - WORKER_PORT=8003
+      - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://chatbot:password123@db:3306/chatbot_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    # Only start if WEB_WORKER_ENABLED is true
+    profiles:
+      - web
+
+  # Vector Worker service
+  vector_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - WORKER_TYPE=vector
+      - WORKER_HOST=0.0.0.0
+      - WORKER_PORT=8004
+      - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://chatbot:password123@db:3306/chatbot_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - LANCEDB_URI=${LANCEDB_URI:-./vector_storage}
+    volumes:
+      - ${VECTOR_STORAGE_DIR:-./vector_storage}:/app/vector_storage
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    # Only start if VECTOR_WORKER_ENABLED is true
+    profiles:
+      - vector
+
+  # Monitoring service
+  monitoring:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - SERVICE_TYPE=monitoring
+      - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://chatbot:password123@db:3306/chatbot_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ${APP_NETWORK_NAME:-app-network}
+    restart: unless-stopped
+    # Only start if MONITORING_ENABLED is true
+    profiles:
+      - monitoring
