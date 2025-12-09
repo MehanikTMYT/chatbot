@@ -2,6 +2,7 @@
 Database models for the Hybrid Chatbot System
 Defines SQLAlchemy models for all entities
 """
+from enum import Enum
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -78,6 +79,13 @@ class Character(Base):
     owner = relationship("User", foreign_keys=[owner_id], back_populates="characters")
     creator = relationship("User", foreign_keys=[creator_id])
 
+class WorkerStatus(Enum):
+    OFFLINE = "offline"
+    ACTIVE = "active"
+    BUSY = "busy"
+    INACTIVE = "inactive"
+    ERROR = "error"
+
 class Worker(Base):
     """Worker model for tracking computational workers"""
     __tablename__ = "workers"
@@ -91,7 +99,7 @@ class Worker(Base):
     gpu_memory = Column(Integer)  # in MB
     total_memory = Column(Integer)  # in MB
     cpu_count = Column(Integer)
-    status = Column(String(20), default="offline")  # 'online', 'offline', 'busy'
+    status = Column(String(20), default=WorkerStatus.OFFLINE.value)  # Use enum values
     last_heartbeat = Column(DateTime, default=func.now())
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
