@@ -1,98 +1,117 @@
 version: '3.8'
 
 services:
-  # Backend service
+  # VDS Backend Service
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    container_name: chatbot-backend
     ports:
-      - "${BACKEND_EXTERNAL_PORT:-8000}:${BACKEND_PORT}"
+      - "8000:8000"
     environment:
-      - BACKEND_ENV=${BACKEND_ENV}
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - SECRET_KEY=${SECRET_KEY}
-      - ALGORITHM=${ALGORITHM}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - VDS_DOMAIN=chat.mehhost.ru
+      - API_GATEWAY_PORT=8000
+      - JWT_SECRET=auto_generate
+    volumes:
+      - ./backend:/app/backend
+      - ./logs:/app/logs
+    networks:
+      - chatbot-network
     depends_on:
       - db
-      - redis
-    volumes:
-      - ${APP_LOGS_VOLUME:-./logs}:/app/logs
-      - /app/__pycache__  # Avoid host Python cache conflicts
-    networks:
-      - ${APP_NETWORK_NAME:-app-network}
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
-  # Frontend service
+  # Local Inference Service (simulated for local testing)
+  local-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference
+    container_name: chatbot-local-inference
+    ports:
+      - "8001:8001"
+    environment:
+      - LOCAL_INFERENCE_PORT=8001
+      - RUST_ACCELERATION=true
+    volumes:
+      - ./local-inference:/app/local-inference
+      - ./models:/app/models
+    networks:
+      - chatbot-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Database
+  db:
+    image: mysql:8.0
+    container_name: chatbot-db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: chatbot_db
+      MYSQL_USER: chatbot_user
+      MYSQL_PASSWORD: chatbot_password
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: chatbot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # Frontend
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+    container_name: chatbot-frontend
     ports:
-      - "${FRONTEND_EXTERNAL_PORT:-80}:${FRONTEND_PORT}"
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app/frontend
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # Nginx as reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: chatbot-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/chatbot.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend/dist:/usr/share/nginx/html
     depends_on:
       - backend
-    environment:
-      - BACKEND_URL=http://backend:${BACKEND_PORT}
+      - frontend
     networks:
-      - ${APP_NETWORK_NAME:-app-network}
+      - chatbot-network
     restart: unless-stopped
-
-  # MySQL database
-  db:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-chatbot_db}
-      MYSQL_USER: ${MYSQL_USER:-chatbot}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password123}
-    volumes:
-      - ${MYSQL_DATA_VOLUME:-mysql_data}:/var/lib/mysql
-      - ./init-scripts:/docker-entrypoint-initdb.d  # For initialization scripts
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    networks:
-      - ${APP_NETWORK_NAME:-app-network}
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER:-chatbot}", "-p${MYSQL_PASSWORD:-password123}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis cache
-  redis:
-    image: redis:6-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - ${REDIS_DATA_VOLUME:-redis_data}:/data
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    networks:
-      - ${APP_NETWORK_NAME:-app-network}
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-networks:
-  ${APP_NETWORK_NAME:-app-network}:
-    driver: bridge
 
 volumes:
-  ${MYSQL_DATA_VOLUME:-mysql_data}:
-    driver: local
-  ${REDIS_DATA_VOLUME:-redis_data}:
-    driver: local
-  ${APP_LOGS_VOLUME:-app_logs}:
-    driver: local
+  db_data:
+  redis_data:
+
+networks:
+  chatbot-network:
+    driver: bridge
