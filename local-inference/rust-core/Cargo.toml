@@ -1,0 +1,22 @@
+[package]
+name = "chatbot-inference"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.19", features = ["extension-module"] }
+cuda-sys = "0.3"
+anyhow = "1.0"
+tokio = { version = "1", features = ["full"] }
+
+[features]
+tensorrt = []
+cuda-native = []
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
